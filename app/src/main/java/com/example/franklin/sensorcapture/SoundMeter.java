@@ -17,7 +17,8 @@ public class SoundMeter {
             mRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
             mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
             mRecorder.setOutputFile(Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + Calendar.getInstance().getTime().toString() + ".wav");
-            mRecorder.setMaxDuration(36000000);
+            mRecorder.setMaxDuration(360000000);
+            mRecorder.setMaxFileSize(1000000000);
             try{
             mRecorder.prepare();
             mRecorder.start();}

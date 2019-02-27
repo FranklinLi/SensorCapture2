@@ -1,22 +1,30 @@
 package com.example.franklin.sensorcapture;
 
+
 import android.Manifest;
 import android.app.Activity;
 import android.app.ListActivity;
+import android.content.ContentResolver;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.media.MediaRecorder;
 import android.os.Environment;
+import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.CompoundButton;
@@ -24,18 +32,31 @@ import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.Switch;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 
-public class MainActivity extends Activity implements SensorEventListener {
+import org.opencv.android.*;
+import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener;
+import org.opencv.core.*;
+import org.opencv.imgproc.Imgproc;
+import org.opencv.objdetect.CascadeClassifier;
+import org.w3c.dom.Text;
+
+public class MainActivity extends Activity implements SensorEventListener{
+
+    //gps
+    private LocationManager locationManager=null;
+    private LocationListener locationListener=null;
 
     //global variables
     public static final String file = ("data.txt");
@@ -45,7 +66,13 @@ public class MainActivity extends Activity implements SensorEventListener {
     public static Date currentTime = Calendar.getInstance().getTime();
     public static final String DATA_COLLECTION_FILE = currentTime.toString() + ".csv";
 
+    private CameraBridgeViewBase openCvCameraView;
+    private CascadeClassifier cascadeClassifier;
+    private Mat grayscaleImage;
+    private int absoluteFaceSize;
+    private Boolean flag = false;
 
+    public double longitude, latitude;
     public String phonestate = "";
     public String personstate = "";
     public String stationname = "";
@@ -62,6 +89,49 @@ public class MainActivity extends Activity implements SensorEventListener {
     public double audioamp = 0, audioamphistory = 30;
     SoundMeter soundmeter = new SoundMeter();
 
+    private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
+        @Override
+        public void onManagerConnected(int status) {
+            switch (status) {
+                case LoaderCallbackInterface.SUCCESS:
+                    initializeOpenCVDependencies();
+                    break;
+                default:
+                    super.onManagerConnected(status);
+                    break;
+            }
+        }
+    };
+
+    private void initializeOpenCVDependencies(){
+        try{
+            // Copy the resource into a temp file so OpenCV can load it
+            InputStream is = getResources().openRawResource(R.raw.lbpcascade_frontalface);
+            File cascadeDir = getDir("cascade", Context.MODE_APPEND);
+            File mCascadeFile = new File(cascadeDir, "lbpcascade_frontalface.xml");
+            FileOutputStream os = new FileOutputStream(mCascadeFile);
+
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = is.read(buffer)) != -1) {
+                os.write(buffer, 0, bytesRead);
+            }
+            is.close();
+            os.close();
+
+            // Load the cascade classifier
+            cascadeClassifier = new CascadeClassifier(mCascadeFile.getAbsolutePath());
+            cascadeClassifier.load(mCascadeFile.getAbsolutePath());
+
+        } catch (Exception e) {
+            Log.e("OpenCVActivity", "Error loading cascade", e);
+        }
+
+        // And we are ready to go
+        openCvCameraView.enableView();
+
+    }
+
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -69,8 +139,73 @@ public class MainActivity extends Activity implements SensorEventListener {
         //creating Folder on device
         setContentView(R.layout.activity_main);
 
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        openCvCameraView = (CameraBridgeViewBase) findViewById(R.id.javaCameraView);
+
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+
+        flag = displayGpsStatus();
+
+
+            locationListener = new MyLocationListener();
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 10, locationListener);
+
+
+        final TextView facedetection = (TextView) findViewById(R.id.textView);
         requestAudioPermissions();
         //soundmeter.start();
+
+
+        if (cascadeClassifier == null){
+            Log.e("OpenCVActivity", "franklinnotload");
+        }
+
+        openCvCameraView.setCameraIndex(1);
+        openCvCameraView.setCvCameraViewListener(new CvCameraViewListener() {
+            @Override
+            public void onCameraViewStarted(int width, int height) {
+                grayscaleImage = new Mat(height, width, CvType.CV_8UC4);
+
+                Log.d("Franklincheck", "Franklincheck111");
+                // The faces will be a 20% of the height of the screen
+                absoluteFaceSize = (int) (height * 0.2);
+            }
+
+            @Override
+            public void onCameraViewStopped() {
+
+            }
+
+            @Override
+            public Mat onCameraFrame(Mat inputFrame) {
+                Imgproc.cvtColor(inputFrame, grayscaleImage, Imgproc.COLOR_RGBA2RGB);
+
+                MatOfRect faces = new MatOfRect();
+
+                // Use the classifier to detect faces
+                if (cascadeClassifier != null) {
+                    cascadeClassifier.detectMultiScale(grayscaleImage, faces, 1.1, 2, 2,
+                            new Size(absoluteFaceSize, absoluteFaceSize), new Size());
+                }
+
+                // If there are any faces found, draw a rectangle around it
+                Rect[] facesArray = faces.toArray();
+
+                Log.d("Franklinface", faces.toString());
+
+                if (faces.toArray().length > 0){
+                    facedetection.setText("Visual Cue");
+                }
+                else if (faces.toArray().length == 0){
+                    facedetection.setText("No visual cue");
+                }
+                    //Core.rectangle(inputFrame, facesArray[i].tl(), facesArray[i].br(), new Scalar(0, 255, 0, 255), 3);
+
+                return inputFrame;
+            }
+        });
 
         Spinner spinner = (Spinner) findViewById(R.id.spinner3);
         spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -211,7 +346,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 
         try{
             OutputStream fo = new FileOutputStream(myDataCollection,true);
-            String title = "time,barometer,magnetometer,linear_acc,linear_gyro,accx,accy,accz,gyrox,gyroy,gyroz,GRVx,GRVy,GRVz,GeoRVx,GeoRVy,GeoRVz,rvx,rvy,rvz,light_sensor,stepcounter,soundlevel,phone,person,station" + "\n";
+            String title = "time,barometer,magnetometer,linear_acc,linear_gyro,accx,accy,accz,gyrox,gyroy,gyroz,GRVx,GRVy,GRVz,GeoRVx,GeoRVy,GeoRVz,rvx,rvy,rvz,light_sensor,stepcounter,soundlevel,latitude,longitude,phone,person,station" + "\n";
 
             fo.write(title.getBytes());
             fo.close();
@@ -262,6 +397,45 @@ public class MainActivity extends Activity implements SensorEventListener {
     }
 
 
+    private Boolean displayGpsStatus() {
+        ContentResolver contentResolver = getBaseContext()
+                .getContentResolver();
+        boolean gpsStatus = Settings.Secure
+                .isLocationProviderEnabled(contentResolver,
+                        LocationManager.GPS_PROVIDER);
+        if (gpsStatus) {
+            return true;
+
+        } else {
+            return false;
+        }
+    }
+
+    private class MyLocationListener implements LocationListener {
+        @Override
+        public void onLocationChanged(Location loc) {
+            longitude = loc.getLongitude();
+            latitude = loc.getLatitude();
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+            // TODO Auto-generated method stub
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+            // TODO Auto-generated method stub
+        }
+
+        @Override
+        public void onStatusChanged(String provider,
+                                    int status, Bundle extras) {
+            // TODO Auto-generated method stub
+        }
+    }
+
+
     private void writeToFile(byte[] data, String sensorNames) {
         System.out.println("----------------Inside writeToFile-----------------");
 
@@ -303,6 +477,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         sensorManager.registerListener(this,mStepCntr,   SensorManager.SENSOR_DELAY_NORMAL);
         sensorManager.registerListener(this, mStepDetect, SensorManager.SENSOR_DELAY_NORMAL);
         sensorManager.registerListener(this, mTemp, SensorManager.SENSOR_DELAY_NORMAL);
+        OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION, this, mLoaderCallback);
     }
 
     @Override
@@ -450,10 +625,10 @@ public class MainActivity extends Activity implements SensorEventListener {
         Date currentTime = Calendar.getInstance().getTime();
 
         if (phonestate.equals("instation")) {
-            sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter)  + "," + String.valueOf(audioamphistory) + "," + personstate + "," + phonestate + "," + stationname + "\n";
+            sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter) + "," + String.valueOf(audioamphistory) + "," + String.valueOf(latitude) +"," + String.valueOf(longitude) + "," + personstate + "," + phonestate + "," + stationname + "\n";
         }
         else{
-            sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter) + "," + String.valueOf(audioamphistory) + "," + personstate + "," + phonestate + "," + "N/A" + "\n";
+            sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter) + "," + String.valueOf(audioamphistory) + "," + String.valueOf(latitude) +"," + String.valueOf(longitude) + "," + personstate + "," + phonestate + "," + "N/A" + "\n";
 
         }
 
