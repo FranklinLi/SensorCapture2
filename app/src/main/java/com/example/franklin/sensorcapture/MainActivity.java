@@ -85,9 +85,9 @@ public class MainActivity extends Activity implements SensorEventListener{
 
     public float barometer = 0, accelerometer = 0, temperature_sensor = 0, light_sensor = 0, magnetometer = 0, linear_acc = 0, linear_gyro = 0, accx = 0, accy = 0, accz = 0, gyrox = 0, gyroy = 0, gyroz = 0, GRVx = 0, GRVy = 0, GRVz = 0, GeoRVx = 0, GeoRVy = 0, GeoRVz = 0, rvx = 0, rvy = 0, rvz = 0, stepcounter = 0, stepdetector = 0;
     Boolean switchState = false;
-
     public double audioamp = 0, audioamphistory = 30;
     SoundMeter soundmeter = new SoundMeter();
+    TextView sensorvalue;
 
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
@@ -139,6 +139,7 @@ public class MainActivity extends Activity implements SensorEventListener{
         //creating Folder on device
         setContentView(R.layout.activity_main);
 
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         openCvCameraView = (CameraBridgeViewBase) findViewById(R.id.javaCameraView);
@@ -152,8 +153,9 @@ public class MainActivity extends Activity implements SensorEventListener{
             locationListener = new MyLocationListener();
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 10, locationListener);
 
-
+        sensorvalue = (TextView) findViewById(R.id.textView2);
         final TextView facedetection = (TextView) findViewById(R.id.textView);
+
         requestAudioPermissions();
         //soundmeter.start();
 
@@ -567,11 +569,17 @@ public class MainActivity extends Activity implements SensorEventListener{
 
         String sensorlist = "";
 
+
+
         if (event.sensor.getName().equals("airpress-bmp380")){
             barometer = event.values[0];
+            String sensordata = "LinearAcc: " +  String.valueOf(Math.sqrt(accx*accx + accy * accy + accz * accz) - 9.8) + " Barometer: " + String.valueOf(barometer) + " Magnetometer: " + String.valueOf(magnetometer);
+            sensorvalue.setText(sensordata);
         }
         else if (event.sensor.getName().equals("uncalibrated Magnetic Field")){
             magnetometer = event.values[0];
+            String sensordata = "LinearAcc: " +  String.valueOf(Math.sqrt(accx*accx + accy * accy + accz * accz) - 9.8) + " Barometer: " + String.valueOf(barometer) + " Magnetometer: " + String.valueOf(magnetometer);
+            sensorvalue.setText(sensordata);
         }
         else if (event.sensor.getName().equals("linear Acceleration")){
             linear_acc = event.values[0];
@@ -583,6 +591,7 @@ public class MainActivity extends Activity implements SensorEventListener{
             accx = event.values[0];
             accy = event.values[1];
             accz = event.values[2];
+            
         }
         else if (event.sensor.getName().equals("gyroscope-lsm6dsm")){
             gyrox = event.values[0];
@@ -631,6 +640,9 @@ public class MainActivity extends Activity implements SensorEventListener{
             sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter) + "," + String.valueOf(audioamphistory) + "," + String.valueOf(latitude) +"," + String.valueOf(longitude) + "," + personstate + "," + phonestate + "," + "N/A" + "\n";
 
         }
+
+
+
 
         byte[] bsensorlist = String.valueOf(sensorlist).getBytes();
 
