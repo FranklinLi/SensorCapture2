@@ -17,6 +17,8 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.media.MediaRecorder;
 import android.os.Environment;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -72,6 +74,7 @@ public class MainActivity extends Activity implements SensorEventListener{
     private int absoluteFaceSize;
     private Boolean flag = false;
 
+    Vibrator vib;
     public double longitude, latitude;
     public String phonestate = "";
     public String personstate = "";
@@ -83,7 +86,7 @@ public class MainActivity extends Activity implements SensorEventListener{
             mGyroUncal, mLight, mLinearAcceleration, mMagFld, mMagFldUncal, mOrientation, mPressure, mRelativeHumid, mRotVect,
             mSignificantMotion, mStepCntr, mStepDetect, mTemp;
 
-    public float barometer = 0, accelerometer = 0, temperature_sensor = 0, light_sensor = 0, magnetometer = 0, linear_acc = 0, linear_gyro = 0, accx = 0, accy = 0, accz = 0, gyrox = 0, gyroy = 0, gyroz = 0, GRVx = 0, GRVy = 0, GRVz = 0, GeoRVx = 0, GeoRVy = 0, GeoRVz = 0, rvx = 0, rvy = 0, rvz = 0, stepcounter = 0, stepdetector = 0;
+    public float barometer = 0, accelerometer = 0, temperature_sensor = 0, light_sensor = 0, magnetometer_x = 0, magnetometer_y = 0, magnetometer_z = 0,  linear_acc = 0, linear_gyro = 0, accx = 0, accy = 0, accz = 0, gyrox = 0, gyroy = 0, gyroz = 0, GRVx = 0, GRVy = 0, GRVz = 0, GeoRVx = 0, GeoRVy = 0, GeoRVz = 0, rvx = 0, rvy = 0, rvz = 0, stepcounter = 0, stepdetector = 0;
     Boolean switchState = false;
     public double audioamp = 0, audioamphistory = 30;
     SoundMeter soundmeter = new SoundMeter();
@@ -139,6 +142,7 @@ public class MainActivity extends Activity implements SensorEventListener{
         //creating Folder on device
         setContentView(R.layout.activity_main);
 
+        vib = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -325,6 +329,8 @@ public class MainActivity extends Activity implements SensorEventListener{
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 switchState = isChecked;
+                //vib.vibrate(VibrationEffect.createOneShot(2000, 255));
+
             }
         });
 
@@ -348,7 +354,7 @@ public class MainActivity extends Activity implements SensorEventListener{
 
         try{
             OutputStream fo = new FileOutputStream(myDataCollection,true);
-            String title = "time,barometer,magnetometer,linear_acc,linear_gyro,accx,accy,accz,gyrox,gyroy,gyroz,GRVx,GRVy,GRVz,GeoRVx,GeoRVy,GeoRVz,rvx,rvy,rvz,light_sensor,stepcounter,soundlevel,latitude,longitude,phone,person,station" + "\n";
+            String title = "time,barometer,magnetometer_x,magnetometer_y,magnetometer_z,linear_acc,linear_gyro,accx,accy,accz,gyrox,gyroy,gyroz,GRVx,GRVy,GRVz,GeoRVx,GeoRVy,GeoRVz,rvx,rvy,rvz,light_sensor,stepcounter,soundlevel,latitude,longitude,phone,person,station" + "\n";
 
             fo.write(title.getBytes());
             fo.close();
@@ -573,12 +579,14 @@ public class MainActivity extends Activity implements SensorEventListener{
 
         if (event.sensor.getName().equals("airpress-bmp380")){
             barometer = event.values[0];
-            String sensordata = "LinearAcc: " +  String.valueOf(Math.sqrt(accx*accx + accy * accy + accz * accz) - 9.8) + " Barometer: " + String.valueOf(barometer) + " Magnetometer: " + String.valueOf(magnetometer);
+            String sensordata = "LinearAcc: " +  String.valueOf(Math.sqrt(accx*accx + accy * accy + accz * accz) - 9.8) + " Barometer: " + String.valueOf(barometer) + " Magnetometer: " + String.valueOf(Math.sqrt(magnetometer_x * magnetometer_x + magnetometer_y * magnetometer_y + magnetometer_z * magnetometer_z));
             sensorvalue.setText(sensordata);
         }
         else if (event.sensor.getName().equals("uncalibrated Magnetic Field")){
-            magnetometer = event.values[0];
-            String sensordata = "LinearAcc: " +  String.valueOf(Math.sqrt(accx*accx + accy * accy + accz * accz) - 9.8) + " Barometer: " + String.valueOf(barometer) + " Magnetometer: " + String.valueOf(magnetometer);
+            magnetometer_x = event.values[0];
+            magnetometer_y = event.values[1];
+            magnetometer_z = event.values[2];
+            String sensordata = "LinearAcc: " +  String.valueOf(Math.sqrt(accx*accx + accy * accy + accz * accz) - 9.8) + " Barometer: " + String.valueOf(barometer) + " Magnetometer: " + String.valueOf(Math.sqrt(magnetometer_x * magnetometer_x + magnetometer_y * magnetometer_y + magnetometer_z * magnetometer_z));
             sensorvalue.setText(sensordata);
         }
         else if (event.sensor.getName().equals("linear Acceleration")){
@@ -591,7 +599,7 @@ public class MainActivity extends Activity implements SensorEventListener{
             accx = event.values[0];
             accy = event.values[1];
             accz = event.values[2];
-            
+
         }
         else if (event.sensor.getName().equals("gyroscope-lsm6dsm")){
             gyrox = event.values[0];
@@ -634,10 +642,10 @@ public class MainActivity extends Activity implements SensorEventListener{
         Date currentTime = Calendar.getInstance().getTime();
 
         if (phonestate.equals("instation")) {
-            sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter) + "," + String.valueOf(audioamphistory) + "," + String.valueOf(latitude) +"," + String.valueOf(longitude) + "," + personstate + "," + phonestate + "," + stationname + "\n";
+            sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer_x) + "," + String.valueOf(magnetometer_y) + "," + String.valueOf(magnetometer_z) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter) + "," + String.valueOf(audioamphistory) + "," + String.valueOf(latitude) +"," + String.valueOf(longitude) + "," + personstate + "," + phonestate + "," + stationname + "\n";
         }
         else{
-            sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter) + "," + String.valueOf(audioamphistory) + "," + String.valueOf(latitude) +"," + String.valueOf(longitude) + "," + personstate + "," + phonestate + "," + "N/A" + "\n";
+            sensorlist = String.valueOf(time) + "," + String.valueOf(barometer) + "," + String.valueOf(magnetometer_x) + "," + String.valueOf(magnetometer_y) + "," + String.valueOf(magnetometer_z) + "," + String.valueOf(linear_acc) + "," + String.valueOf(linear_gyro) + "," + String.valueOf(accx) + "," + String.valueOf(accy) + "," + String.valueOf(accz) + "," + String.valueOf(gyrox) + "," + String.valueOf(gyroy) + "," + String.valueOf(gyroz) + "," + String.valueOf(GRVx) + "," + String.valueOf(GRVy) + "," + String.valueOf(GRVz) + "," + String.valueOf(GeoRVx) + "," + String.valueOf(GeoRVy) + "," + String.valueOf(GeoRVz) + "," + String.valueOf(rvx) + "," + String.valueOf(rvy) + "," + String.valueOf(rvz) + "," + String.valueOf(light_sensor) + "," + String.valueOf(stepcounter) + "," + String.valueOf(audioamphistory) + "," + String.valueOf(latitude) +"," + String.valueOf(longitude) + "," + personstate + "," + phonestate + "," + "N/A" + "\n";
 
         }
 
